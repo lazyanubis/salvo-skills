@@ -410,15 +410,127 @@ With OpenAPI documentation, you can generate client libraries:
 - **Swagger Codegen**: For various languages
 - **Postman**: Import directly for testing
 
-## Best Practices
+## Best Practices for Automatic Documentation
+
+### Use Function Parameters Instead of Manual Extraction
+
+**IMPORTANT**: For OpenAPI documentation to be generated automatically, use function parameter extractors instead of manually extracting from `Request`.
+
+```rust
+// ❌ BAD: Manual extraction - NO OpenAPI documentation generated
+#[endpoint]
+async fn get_user(req: &mut Request) -> Json<User> {
+    let id = req.param::<i64>("id").unwrap();  // Not documented!
+    let page = req.query::<i32>("page");        // Not documented!
+    // ...
+}
+
+// ✅ GOOD: Parameter extractors - OpenAPI documentation auto-generated
+#[endpoint]
+async fn get_user(
+    id: PathParam<i64>,           // Documented as path parameter
+    page: QueryParam<i32, false>, // Documented as optional query parameter
+) -> Json<User> {
+    // ...
+}
+```
+
+When you use extractors like `PathParam`, `QueryParam`, `JsonBody`, the OpenAPI generator can:
+- Automatically detect parameter names and types
+- Mark parameters as required or optional
+- Generate proper schema definitions
+
+### Return Result with impl Writer Types
+
+**IMPORTANT**: Return `Result<T, E>` where both `T` and `E` implement `Writer` and `EndpointOutRegister`. This enables automatic documentation of both success and error responses.
+
+```rust
+// ❌ LIMITED: Only success response documented
+#[endpoint]
+async fn get_user(id: PathParam<i64>) -> Json<User> {
+    Json(User { /* ... */ })
+}
+
+// ✅ BETTER: Both success and error responses documented
+#[endpoint]
+async fn get_user(id: PathParam<i64>) -> Result<Json<User>, StatusError> {
+    let id = id.into_inner();
+    if id <= 0 {
+        return Err(StatusError::bad_request().brief("Invalid ID"));
+    }
+    Ok(Json(User { id, name: "John".into(), email: "john@example.com".into() }))
+}
+```
+
+### Custom Error Types for Rich Documentation
+
+Define custom error types that implement `Writer` and `EndpointOutRegister` for detailed error documentation:
+
+```rust
+use salvo::oapi::{ToSchema, EndpointOutRegister, Components, Operation};
+use salvo::prelude::*;
+use serde::Serialize;
+
+#[derive(Debug, Serialize, ToSchema)]
+struct ApiError {
+    /// Error code
+    code: i32,
+    /// Error message
+    message: String,
+}
+
+impl Writer for ApiError {
+    async fn write(self, _req: &mut Request, _depot: &mut Depot, res: &mut Response) {
+        res.status_code(StatusCode::BAD_REQUEST);
+        res.render(Json(self));
+    }
+}
+
+impl EndpointOutRegister for ApiError {
+    fn register(components: &mut Components, operation: &mut Operation) {
+        operation.responses.insert(
+            "400".into(),
+            salvo::oapi::Response::new("Bad Request")
+                .add_content("application/json", Self::to_schema(components)),
+        );
+    }
+}
+
+// Now both success and custom error are documented
+#[endpoint]
+async fn create_user(body: JsonBody<CreateUser>) -> Result<Json<User>, ApiError> {
+    let user = body.into_inner();
+    if user.name.is_empty() {
+        return Err(ApiError {
+            code: 1001,
+            message: "Name cannot be empty".into(),
+        });
+    }
+    Ok(Json(User { id: 1, name: user.name, email: user.email }))
+}
+```
+
+### Summary of Documentation Requirements
+
+| Pattern | Parameters Documented | Response Documented |
+|---------|----------------------|---------------------|
+| `req.param()` / `req.query()` | ❌ No | - |
+| `PathParam<T>` / `QueryParam<T>` | ✅ Yes | - |
+| `-> Json<T>` | - | ✅ Success only |
+| `-> Result<Json<T>, StatusError>` | - | ✅ Success + Error |
+| `-> Result<Json<T>, CustomError>` | - | ✅ Full control |
+
+## General Best Practices
 
 1. Use `#[endpoint]` for all API handlers that need documentation
-2. Add `ToSchema` to all request/response types
-3. Document fields with Rust doc comments (`///`)
-4. Use `ToParameters` for query parameter structs
-5. Specify response status codes explicitly
-6. Group endpoints with meaningful tags
-7. Provide examples for complex schemas
-8. Use security schemes for protected endpoints
-9. Serve Swagger UI for interactive documentation
-10. Keep documentation in sync by generating from code
+2. **Use function parameter extractors** (not manual `Request` extraction) for auto-documentation
+3. **Return `Result<T, E>`** where both types implement `Writer` for complete response documentation
+4. Add `ToSchema` to all request/response types
+5. Document fields with Rust doc comments (`///`)
+6. Use `ToParameters` for query parameter structs
+7. Specify response status codes explicitly
+8. Group endpoints with meaningful tags
+9. Provide examples for complex schemas
+10. Use security schemes for protected endpoints
+11. Serve Swagger UI for interactive documentation
+12. Keep documentation in sync by generating from code
