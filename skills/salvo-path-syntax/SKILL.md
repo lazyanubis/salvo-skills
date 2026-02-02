@@ -193,8 +193,10 @@ Check your Salvo version in `Cargo.toml`:
 
 ```toml
 [dependencies]
-salvo = "0.76"  # Uses {} syntax
-# or
+# Version 0.76+ uses {} syntax
+salvo = "0.76"  # First version with {} syntax
+
+# Version 0.75 and earlier uses <> syntax (deprecated)
 salvo = "0.75"  # Uses <> syntax (deprecated)
 ```
 
@@ -202,8 +204,10 @@ For the latest version, always use `{}` syntax:
 
 ```toml
 [dependencies]
-salvo = "0.77"  # Current stable - uses {} syntax
+salvo = "1.88.1"  # Current stable - uses {} syntax
 ```
+
+Note: The `{}` syntax was introduced in version 0.76 and is used in all versions since then, including the current 1.x releases.
 
 ## Best Practices
 
