@@ -303,3 +303,8 @@ async fn heartbeat_task(tx: Sender<Message>) {
 
 - **salvo-websocket**: Detailed WebSocket implementation guide
 - **salvo-sse**: Detailed SSE implementation guide
+
+## Related Skills
+
+- **salvo-websocket**: Detailed WebSocket implementation guide
+- **salvo-sse**: Detailed SSE implementation guide
